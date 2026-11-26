@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 process.env.DATABASE_URL ??= "postgres://unused";
-const { buildBpsDataset } = await import("./bps");
+const { buildBpsDataset, mergeDataResponses } = await import("./bps");
 
 // Shape and values of the example in the official documentation.
 const docExample = {
@@ -63,6 +63,21 @@ test("monthly data keeps the period column", () => {
   assert.deepEqual(ds.data, [
     { wilayah: "INDONESIA", tahun: 2000, periode: "Januari", nilai: 1.1 },
     { wilayah: "INDONESIA", tahun: 2000, periode: "Februari", nilai: 1.2 },
+  ]);
+});
+
+test("responses for different periods merge into one table", () => {
+  const second = {
+    ...docExample,
+    tahun: [{ val: 101, label: "2001" }],
+    vervar: [{ val: 9999, label: "INDONESIA" }, { val: 7300, label: "SULAWESI SELATAN" }],
+    datacontent: { "99991452891010": 85.1, "73001452891010": 82 },
+  };
+  const ds = buildBpsDataset(mergeDataResponses(docExample, second), "Indonesia");
+  assert.deepEqual(ds.data, [
+    { wilayah: "INDONESIA", tahun: 2000, nilai: 83.68 },
+    { wilayah: "INDONESIA", tahun: 2001, nilai: 85.1 },
+    { wilayah: "SULAWESI SELATAN", tahun: 2001, nilai: 82 },
   ]);
 });
 

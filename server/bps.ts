@@ -12,7 +12,9 @@ const BASE = "https://webapi.bps.go.id/v1/api";
 const TIMEOUT_MS = 30_000;
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const MAX_PAGES = 40;
-export const MAX_PERIODS = 60;
+export const MAX_PERIODS = 30;
+/** BPS rejects data requests that ask for more than three periods at once. */
+const PERIODS_PER_REQUEST = 3;
 
 export interface BpsOption {
   id: string;
@@ -88,10 +90,11 @@ const stripHtml = (value: unknown) =>
 export function listDomains(): Promise<BpsOption[]> {
   return cached("domains", async () => {
     const rows = await listAll("domain/type/all");
-    const domains = rows.map((r) => ({ id: String(r.domain_id), name: stripHtml(r.domain_name) }));
-    // The national domain is not always part of the list.
-    if (!domains.some((d) => d.id === "0000")) domains.unshift({ id: "0000", name: "Indonesia (nasional)" });
-    return domains;
+    // BPS calls the national domain "Pusat"; show it under a clearer name, first in the list.
+    const domains = rows
+      .map((r) => ({ id: String(r.domain_id), name: stripHtml(r.domain_name) }))
+      .filter((d) => d.id !== "0000");
+    return [{ id: "0000", name: "Indonesia (nasional)" }, ...domains];
   });
 }
 
@@ -232,14 +235,46 @@ export function buildBpsDataset(body: any, domainName: string): Dataset {
   return dataset;
 }
 
+/** Combines two `model=data` responses for the same variable and different periods. */
+export function mergeDataResponses(a: any, b: any): any {
+  const union = (x: unknown, y: unknown) => {
+    const seen = new Set<string>();
+    return [...asList(x), ...asList(y)].filter((item) => {
+      const key = String(item.val);
+      return seen.has(key) ? false : (seen.add(key), true);
+    });
+  };
+  return {
+    ...a,
+    vervar: union(a.vervar, b.vervar),
+    turvar: union(a.turvar, b.turvar),
+    tahun: union(a.tahun, b.tahun),
+    turtahun: union(a.turtahun, b.turtahun),
+    datacontent: { ...a.datacontent, ...b.datacontent },
+  };
+}
+
 export async function fetchBpsDataset(domain: string, variable: string, periodIds: string[]): Promise<Dataset> {
   const d = onlyDigits(domain, 4);
   const v = onlyDigits(variable);
   const periods = periodIds.map((p) => onlyDigits(p)).slice(0, MAX_PERIODS);
   if (periods.length === 0) throw new ProviderError("Pilih setidaknya satu tahun.", 400);
 
-  const body = await request(`list/model/data/domain/${d}/var/${v}/th/${periods.join(";")}`);
-  if (!isAvailable(body)) {
+  // Fetch a few periods at a time and merge the answers into one response.
+  let body: any = null;
+  for (let i = 0; i < periods.length; i += PERIODS_PER_REQUEST) {
+    const part = await request(
+      `list/model/data/domain/${d}/var/${v}/th/${periods.slice(i, i + PERIODS_PER_REQUEST).join(";")}`
+    );
+    if (isAvailable(part)) {
+      body = body ? mergeDataResponses(body, part) : part;
+    } else if (String(part?.status).toLowerCase() === "error" && part?.message && part?.["data-availability"] === undefined) {
+      // A request BPS refused (as opposed to "no data for these periods").
+      console.error("BPS refused a data request:", part.message);
+      throw new ProviderError("BPS menolak permintaan data ini. Coba rentang tahun yang lebih pendek.", 502);
+    }
+  }
+  if (!body) {
     throw new ProviderError("BPS tidak punya data untuk pilihan ini. Coba tahun atau wilayah lain.", 404);
   }
   const domainName = (await listDomains()).find((x) => x.id === d)?.name ?? d;

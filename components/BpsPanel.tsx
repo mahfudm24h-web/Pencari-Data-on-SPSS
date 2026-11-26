@@ -67,7 +67,7 @@ const BpsPanel: React.FC<Props> = ({ loading, onFetch, onError }) => {
     return a === -1 || b === -1 ? [] : list.slice(Math.min(a, b), Math.max(a, b) + 1);
   }, [periods.items, from, to]);
 
-  const tooMany = selectedPeriods.length > 60;
+  const tooMany = selectedPeriods.length > 30;
   const canFetch = Boolean(variable) && selectedPeriods.length > 0 && !tooMany && !loading;
   const hint = (busy: boolean, empty: string) => (busy ? 'Memuat…' : empty);
 
@@ -133,7 +133,7 @@ const BpsPanel: React.FC<Props> = ({ loading, onFetch, onError }) => {
       <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
           {tooMany
-            ? 'Paling banyak 60 tahun sekali ambil. Persempit rentangnya.'
+            ? 'Paling banyak 30 tahun sekali ambil. Persempit rentangnya.'
             : 'Angka diambil langsung dari WebAPI BPS, tanpa AI, dan tidak mengurangi jatah pencarian.'}
         </p>
         <button
