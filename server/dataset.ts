@@ -99,7 +99,8 @@ export function sanitizeUrl(value: unknown): string | null {
 }
 
 function countDecimals(n: number): number {
-  const s = String(n);
+  // toPrecision drops floating-point noise such as 5.300000000000001.
+  const s = String(Number(n.toPrecision(12)));
   if (s.includes("e")) return 0;
   const i = s.indexOf(".");
   return i === -1 ? 0 : Math.min(s.length - i - 1, 6);
@@ -122,7 +123,7 @@ export function normalizeDataset(
   const warnings: string[] = [];
 
   const rawVars = Array.isArray(input.variables) ? input.variables.slice(0, MAX_VARIABLES) : [];
-  if (rawVars.length === 0) throw new Error("The AI returned no variables.");
+  if (rawVars.length === 0) throw new Error("AI tidak mengembalikan variabel.");
 
   const used = new Set<string>();
   const variables: DatasetVariable[] = rawVars.map((v: any, i) => {
@@ -142,7 +143,7 @@ export function normalizeDataset(
 
   let rawRows = Array.isArray(input.observations) ? input.observations : [];
   if (rawRows.length > MAX_ROWS) {
-    warnings.push(`Only the first ${MAX_ROWS} of ${rawRows.length} rows were kept.`);
+    warnings.push(`Hanya ${MAX_ROWS} baris pertama dari ${rawRows.length} yang dipakai.`);
     rawRows = rawRows.slice(0, MAX_ROWS);
   }
 
@@ -170,11 +171,11 @@ export function normalizeDataset(
 
   if (misaligned > 0) {
     warnings.push(
-      `${misaligned} row(s) did not have one value per variable; missing cells were left empty.`
+      `${misaligned} baris tidak punya nilai untuk setiap variabel; sel yang kurang dikosongkan.`
     );
   }
   for (const [name, count] of unparsed) {
-    warnings.push(`${count} value(s) in "${name}" were not numbers and were left empty.`);
+    warnings.push(`${count} nilai di "${name}" bukan angka dan dikosongkan.`);
   }
 
   // Derive display width and decimals from the actual values.
@@ -207,13 +208,13 @@ export function normalizeDataset(
   if (Array.isArray(input.sources)) input.sources.forEach((s) => addSource(s));
   extraSources.forEach((s) => addSource(s.url, s.title));
 
-  if (data.length === 0) warnings.push("The AI found no rows for this request.");
+  if (data.length === 0) warnings.push("AI tidak menemukan data untuk permintaan ini.");
   if (sources.length === 0) {
-    warnings.push("No source links were returned. Treat these numbers as unverified.");
+    warnings.push("Tidak ada tautan sumber. Anggap angka-angka ini belum terverifikasi.");
   }
 
   return {
-    title: cleanText(input.title, 200) || "Untitled dataset",
+    title: cleanText(input.title, 200) || "Dataset tanpa judul",
     description: cleanText(input.description, 1000),
     suggestedAnalysis: cleanText(input.suggested_analysis, 500),
     variables,
@@ -231,7 +232,7 @@ export function extractJson(text: string): unknown {
   } catch {
     const start = trimmed.indexOf("{");
     const end = trimmed.lastIndexOf("}");
-    if (start === -1 || end <= start) throw new Error("The AI reply was not valid JSON.");
+    if (start === -1 || end <= start) throw new Error("Jawaban AI bukan JSON yang sah.");
     return JSON.parse(trimmed.slice(start, end + 1));
   }
 }

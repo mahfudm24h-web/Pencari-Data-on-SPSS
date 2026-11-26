@@ -101,7 +101,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center text-slate-500 text-sm font-medium">
             <Filter className="w-4 h-4 mr-2" />
-            Filters:
+            Filter:
           </div>
 
           <select
@@ -109,7 +109,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
             onChange={(e) => setPendingColumn(e.target.value)}
             className="text-sm border border-slate-300 rounded-md focus:border-blue-500 focus:ring-blue-500 bg-white py-1.5 px-3 shadow-sm outline-none"
           >
-            <option value="">Select Column...</option>
+            <option value="">Pilih kolom...</option>
             {dataset.variables.map((v) => (
               <option key={v.name} value={v.name}>
                 {v.name}
@@ -126,7 +126,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
               value={pendingValue}
               onChange={(e) => setPendingValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={pendingColumn ? "Value..." : "Select column first"}
+              placeholder={pendingColumn ? "Nilai..." : "Pilih kolom dulu"}
               disabled={!pendingColumn}
               className="block w-full pl-10 pr-3 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 shadow-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
             />
@@ -138,11 +138,11 @@ const DataView: React.FC<Props> = ({ dataset }) => {
             className="flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4 mr-1" />
-            Add Filter
+            Tambah filter
           </button>
 
-           <div className="ml-auto text-xs text-slate-400 font-medium">
-            Showing <span className="text-slate-700">{filteredData.length}</span> of {dataset.data.length} rows
+           <div className="ml-auto text-xs text-slate-500 font-medium">
+            Menampilkan <span className="text-slate-700">{filteredData.length}</span> dari {dataset.data.length} baris
           </div>
         </div>
 
@@ -158,6 +158,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
                 "{filter.value}"
                 <button
                   onClick={() => handleRemoveFilter(index)}
+                  aria-label={`Hapus filter ${filter.column}`}
                   className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600 transition-colors focus:outline-none"
                 >
                   <X className="w-3 h-3" />
@@ -169,7 +170,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
               onClick={handleClearAll}
               className="ml-2 text-xs text-slate-500 hover:text-red-600 hover:underline transition-colors font-medium"
             >
-              Clear All Filters
+              Hapus semua filter
             </button>
           </div>
         )}
@@ -216,12 +217,12 @@ const DataView: React.FC<Props> = ({ dataset }) => {
                 <td colSpan={dataset.variables.length + 1} className="px-4 py-12 text-center text-slate-400">
                   <div className="flex flex-col items-center">
                     <Search className="w-8 h-8 mb-2 opacity-50" />
-                    <p>No rows match your combined filters.</p>
+                    <p>Tidak ada baris yang cocok dengan filter.</p>
                     <button 
                       onClick={handleClearAll}
                       className="mt-2 text-blue-600 hover:underline text-xs"
                     >
-                      Clear all filters
+                      Hapus semua filter
                     </button>
                   </div>
                 </td>

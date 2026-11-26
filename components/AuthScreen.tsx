@@ -25,7 +25,7 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
         mode === 'login' ? await api.login(email, password) : await api.register(name, email, password);
       onSignedIn(user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan. Silakan coba lagi.');
     } finally {
       setBusy(false);
     }
@@ -46,12 +46,12 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
 
         <form onSubmit={submit} className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
           <h2 className="text-lg font-semibold text-slate-900">
-            {mode === 'login' ? 'Sign in' : 'Create an account'}
+            {mode === 'login' ? 'Masuk' : 'Buat akun'}
           </h2>
 
           {mode === 'register' && (
             <label className="block text-sm font-medium text-slate-700">
-              Name
+              Nama
               <input className={`${inputClass} mt-1`} value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
             </label>
           )}
@@ -60,7 +60,7 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
             <input type="email" className={`${inputClass} mt-1`} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
           </label>
           <label className="block text-sm font-medium text-slate-700">
-            Password
+            Kata sandi
             <input
               type="password"
               className={`${inputClass} mt-1`}
@@ -70,7 +70,7 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
               minLength={mode === 'register' ? 8 : undefined}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
-            {mode === 'register' && <span className="block mt-1 text-xs font-normal text-slate-500">At least 8 characters.</span>}
+            {mode === 'register' && <span className="block mt-1 text-xs font-normal text-slate-500">Minimal 8 karakter.</span>}
           </label>
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{error}</div>}
@@ -80,13 +80,13 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
             disabled={busy}
             className="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg px-4 py-2 transition-colors"
           >
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === 'login' ? 'Sign in' : 'Create account'}
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === 'login' ? 'Masuk' : 'Buat akun'}
           </button>
         </form>
 
         {allowRegistration && (
           <p className="text-center text-sm text-slate-600 mt-4">
-            {mode === 'login' ? 'No account yet?' : 'Already have an account?'}{' '}
+            {mode === 'login' ? 'Belum punya akun?' : 'Sudah punya akun?'}{' '}
             <button
               type="button"
               className="text-blue-600 hover:underline font-medium"
@@ -95,7 +95,7 @@ const AuthScreen: React.FC<Props> = ({ allowRegistration, onSignedIn }) => {
                 setError(null);
               }}
             >
-              {mode === 'login' ? 'Create one' : 'Sign in'}
+              {mode === 'login' ? 'Daftar' : 'Masuk'}
             </button>
           </p>
         )}

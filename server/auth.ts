@@ -75,7 +75,7 @@ export async function loadUser(req: Request, _res: Response, next: NextFunction)
 
 export function requireUser(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
-    res.status(401).json({ error: "Please sign in." });
+    res.status(401).json({ error: "Silakan masuk terlebih dahulu." });
     return;
   }
   next();
@@ -86,7 +86,7 @@ const authLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many attempts. Please wait a few minutes and try again." },
+  message: { error: "Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi." },
 });
 
 export const authRouter = Router();
@@ -101,18 +101,18 @@ authRouter.post("/register", authLimiter, async (req, res) => {
   const password = typeof req.body?.password === "string" ? req.body.password : "";
 
   if (!EMAIL_RE.test(email) || email.length > 200) {
-    return res.status(400).json({ error: "Please enter a valid email address." });
+    return res.status(400).json({ error: "Masukkan alamat email yang benar." });
   }
-  if (!name) return res.status(400).json({ error: "Please enter your name." });
+  if (!name) return res.status(400).json({ error: "Masukkan nama Anda." });
   if (password.length < 8 || password.length > 200) {
-    return res.status(400).json({ error: "Password must be at least 8 characters." });
+    return res.status(400).json({ error: "Kata sandi minimal 8 karakter." });
   }
 
   const { rows: countRows } = await pool.query("SELECT count(*)::int AS n FROM users");
   const isFirstUser = countRows[0].n === 0;
   // The first account becomes the administrator and can always be created.
   if (!isFirstUser && !config.allowRegistration) {
-    return res.status(403).json({ error: "Registration is closed. Ask the administrator for an account." });
+    return res.status(403).json({ error: "Pendaftaran ditutup. Minta akun kepada administrator." });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
@@ -126,7 +126,7 @@ authRouter.post("/register", authLimiter, async (req, res) => {
     return res.status(201).json({ user: rows[0] });
   } catch (err) {
     if ((err as { code?: string }).code === "23505") {
-      return res.status(409).json({ error: "An account with this email already exists." });
+      return res.status(409).json({ error: "Email ini sudah terdaftar." });
     }
     throw err;
   }
@@ -143,7 +143,7 @@ authRouter.post("/login", authLimiter, async (req, res) => {
   const user = rows[0];
   // Compare against a dummy hash when the user is unknown so timing does not reveal it.
   const ok = (await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH)) && Boolean(user);
-  if (!ok) return res.status(401).json({ error: "Incorrect email or password." });
+  if (!ok) return res.status(401).json({ error: "Email atau kata sandi salah." });
 
   await startSession(res, user.id);
   return res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });

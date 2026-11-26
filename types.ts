@@ -10,6 +10,13 @@ export interface SPSSVariable {
   decimals: number;
   label: string;
   measure: MeasureType;
+  /** Value labels, e.g. 1 = "Laki-laki". */
+  values?: ValueLabel[];
+}
+
+export interface ValueLabel {
+  value: string;
+  label: string;
 }
 
 export interface DataSource {

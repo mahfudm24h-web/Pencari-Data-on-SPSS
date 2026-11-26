@@ -15,14 +15,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
     });
   } catch {
-    throw new ApiError('Could not reach the server. Check your connection and try again.', 0);
+    throw new ApiError('Tidak bisa menghubungi server. Periksa koneksi Anda lalu coba lagi.', 0);
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new ApiError(
       typeof payload?.error === 'string' && payload.error
         ? payload.error
-        : 'Something went wrong. Please try again.',
+        : 'Terjadi kesalahan. Silakan coba lagi.',
       response.status
     );
   }
@@ -44,9 +44,14 @@ export const api = {
   search: (query: string, provider: string, mode: SearchMode) =>
     post<SPSSDataset>('/api/search', { query, provider, mode }),
 
+  askAssistant: (provider: string, context: string, messages: { role: 'user' | 'assistant'; text: string }[]) =>
+    post<{ text: string; model: string; providerLabel: string }>('/api/assistant', { provider, context, messages }),
+
   listDatasets: () => request<{ datasets: DatasetSummary[] }>('/api/datasets'),
   getDataset: (id: number) => request<SPSSDataset>(`/api/datasets/${id}`),
   saveDataset: (dataset: SPSSDataset) =>
     post<{ dataset: DatasetSummary }>('/api/datasets', dataset),
+  updateDataset: (id: number, dataset: SPSSDataset) =>
+    request<{ dataset: DatasetSummary }>(`/api/datasets/${id}`, { method: 'PUT', body: JSON.stringify(dataset) }),
   deleteDataset: (id: number) => request<{ ok: true }>(`/api/datasets/${id}`, { method: 'DELETE' }),
 };

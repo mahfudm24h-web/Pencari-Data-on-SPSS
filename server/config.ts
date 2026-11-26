@@ -16,6 +16,7 @@ export const config = {
   allowRegistration: str("ALLOW_REGISTRATION", "true") !== "false",
   dailySearchLimit: int("DAILY_SEARCH_LIMIT", 20),
   dailyDeepLimit: int("DAILY_DEEP_LIMIT", 5),
+  dailyChatLimit: int("DAILY_CHAT_LIMIT", 50),
   sessionDays: int("SESSION_DAYS", 30),
   geminiApiKey: str("GEMINI_API_KEY"),
   geminiModelFast: str("GEMINI_MODEL_FAST", "gemini-3-flash-preview"),

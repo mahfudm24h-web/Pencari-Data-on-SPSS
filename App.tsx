@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle, BrainCircuit, Check, Database, Download, FileCode, FileSpreadsheet, FolderOpen,
-  Loader2, LogOut, Save, Search, Sparkles, Table as TableIcon,
+  Loader2, LogOut, MessageSquare, Save, Search, Sparkles, Table as TableIcon,
 } from 'lucide-react';
 import { api, ApiError } from './services/api';
 import { downloadCsv, downloadSpssSyntax } from './services/export';
 import { DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from './types';
+import ChatAssistant from './components/ChatAssistant';
+import SearchLoader from './components/SearchLoader';
 import AuthScreen from './components/AuthScreen';
 import VariableView from './components/VariableView';
 import DataView from './components/DataView';
@@ -24,7 +26,7 @@ function readStoredProvider(): string {
 }
 
 const messageOf = (err: unknown) =>
-  err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+  err instanceof Error ? err.message : 'Terjadi kesalahan. Silakan coba lagi.';
 
 const App: React.FC = () => {
   const [authChecked, setAuthChecked] = useState(false);
@@ -44,6 +46,7 @@ const App: React.FC = () => {
 
   const [savedDatasets, setSavedDatasets] = useState<DatasetSummary[]>([]);
   const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   // A 401 on any call means the session ended; drop back to the sign-in screen.
@@ -110,14 +113,23 @@ const App: React.FC = () => {
     if (!dataset || saveState !== 'idle') return;
     setSaveState('saving');
     try {
-      const { dataset: summary } = await api.saveDataset(dataset);
-      setSavedDatasets((list) => [summary, ...list]);
+      // A dataset that was saved before is updated in place; a new one is added.
+      const known = dataset.id !== undefined && savedDatasets.some((d) => d.id === dataset.id);
+      const { dataset: summary } = known
+        ? await api.updateDataset(dataset.id!, dataset)
+        : await api.saveDataset(dataset);
+      setSavedDatasets((list) => [summary, ...list.filter((d) => d.id !== summary.id)]);
       setDataset({ ...dataset, id: summary.id, savedAt: summary.savedAt });
       setSaveState('saved');
     } catch (err) {
       setSaveState('idle');
       handleError(err);
     }
+  };
+
+  const handleUpdateDataset = (updated: SPSSDataset) => {
+    setDataset(updated);
+    setSaveState('idle');
   };
 
   const handleDeleteDataset = async (id: number) => {
@@ -187,19 +199,19 @@ const App: React.FC = () => {
             <button
               onClick={() => setIsSavedModalOpen(true)}
               className="flex items-center space-x-1 hover:text-blue-600 transition-colors"
-              aria-label="My datasets"
+              aria-label="Dataset saya"
             >
               <FolderOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">My Datasets ({savedDatasets.length})</span>
+              <span className="hidden sm:inline">Dataset Saya ({savedDatasets.length})</span>
             </button>
             <span className="hidden md:inline border-l border-slate-200 pl-4 max-w-[160px] truncate">{user.name}</span>
             <button
               onClick={handleLogout}
               className="flex items-center space-x-1 hover:text-red-600 transition-colors"
-              aria-label="Sign out"
+              aria-label="Keluar"
             >
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sign out</span>
+              <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </div>
@@ -207,10 +219,10 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-3xl mx-auto mb-12 text-center">
-          <h2 className="text-3xl font-bold text-slate-900 mb-4">Find Real-World Data for Analysis</h2>
+          <h2 className="text-3xl font-bold text-slate-900 mb-4">Cari Data Nyata untuk Analisis</h2>
           <p className="text-slate-600 mb-8">
-            Describe the economic, social or scientific data you need. An AI model searches the web for it and
-            formats it for SPSS (Variable View &amp; Data View).
+            Tuliskan data ekonomi, sosial, atau ilmiah yang Anda butuhkan. Model AI mencarinya di web lalu
+            menyusunnya untuk SPSS (Variable View &amp; Data View).
           </p>
 
           <form onSubmit={handleSearch} className="relative group">
@@ -220,7 +232,7 @@ const App: React.FC = () => {
             <input
               type="text"
               className="block w-full pl-11 pr-32 py-4 bg-white border border-slate-200 rounded-xl shadow-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="e.g. GDP and Unemployment Rate in Indonesia 2010-2023"
+              placeholder="mis. PDB dan tingkat pengangguran Indonesia 2010–2023"
               value={query}
               maxLength={2000}
               onChange={(e) => setQuery(e.target.value)}
@@ -230,19 +242,19 @@ const App: React.FC = () => {
               disabled={loading || !provider}
               className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-6 transition-colors disabled:bg-blue-400 flex items-center justify-center min-w-[100px]"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Search'}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Cari'}
             </button>
           </form>
 
           {providers.length === 0 ? (
             <p className="mt-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-              No AI model is set up yet. The administrator needs to add an API key on the server.
+              Belum ada model AI yang disiapkan. Administrator perlu mengisi kunci API di server.
             </p>
           ) : (
             <div className="mt-6 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8">
               <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
                 <Sparkles className="w-4 h-4 text-yellow-500" />
-                AI model
+                Model AI
                 <select
                   value={providerId}
                   onChange={(e) => chooseProvider(e.target.value)}
@@ -268,7 +280,7 @@ const App: React.FC = () => {
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                 <span className="ml-3 text-sm font-medium text-slate-600 group-hover:text-slate-900 transition-colors flex items-center gap-1.5">
                   <BrainCircuit className={`w-4 h-4 ${mode === 'deep' ? 'text-indigo-600' : 'text-slate-400'}`} />
-                  Deep search
+                  Pencarian mendalam
                 </span>
               </label>
             </div>
@@ -277,18 +289,19 @@ const App: React.FC = () => {
           {provider && (
             <p className="mt-3 text-xs text-slate-500">
               {mode === 'deep'
-                ? 'Deep search reads more sources. It is slower and can take a few minutes.'
-                : 'Fast search usually takes under a minute.'}
-              {searchesLeft !== null && ` ${searchesLeft} of ${quota!.limit} searches left today.`}
+                ? 'Pencarian mendalam membaca lebih banyak sumber. Lebih lambat dan bisa makan beberapa menit.'
+                : 'Pencarian cepat biasanya selesai dalam satu menit.'}
+              {searchesLeft !== null && ` Sisa ${searchesLeft} dari ${quota!.limit} pencarian hari ini.`}
             </p>
           )}
         </div>
 
         {loading && (
-          <div className="max-w-3xl mx-auto mb-8 flex items-center justify-center gap-3 text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-            Searching the web with {provider?.label}. Keep this page open.
-          </div>
+          <SearchLoader
+            label={`Mencari di web dengan ${provider?.label ?? 'AI'}…`}
+            slowHint={mode === 'deep' ? 'Pencarian mendalam bisa makan sampai tujuh menit.' : 'Ini lebih lama dari biasanya. Pencarian dihentikan otomatis setelah tiga menit.'}
+            slowAfterSeconds={mode === 'deep' ? 180 : 60}
+          />
         )}
 
         {error && (
@@ -304,13 +317,14 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-bold text-slate-900">{dataset.title}</h2>
                 <p className="text-slate-600 mt-1 max-w-2xl">{dataset.description}</p>
                 <p className="text-xs text-slate-500 mt-2">
-                  Collected by {dataset.providerLabel} ({dataset.model}) on{' '}
-                  {new Date(dataset.retrievedAt).toLocaleDateString()}
+                  Dikumpulkan oleh {dataset.providerLabel}
+                  {dataset.model && ` (${dataset.model})`} pada{' '}
+                  {new Date(dataset.retrievedAt).toLocaleDateString('id-ID', { dateStyle: 'long' })}
                 </p>
                 {dataset.suggestedAnalysis && (
                   <div className="mt-3 flex items-start gap-2 text-sm text-indigo-700 bg-indigo-50 px-3 py-2 rounded-md border border-indigo-100 max-w-2xl">
                     <Sparkles className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span className="font-medium">AI Tip: {dataset.suggestedAnalysis}</span>
+                    <span className="font-medium">Saran analisis: {dataset.suggestedAnalysis}</span>
                   </div>
                 )}
               </div>
@@ -321,22 +335,31 @@ const App: React.FC = () => {
                   className="flex items-center space-x-2 bg-white border border-slate-300 hover:bg-slate-50 disabled:hover:bg-white disabled:text-slate-400 text-slate-700 px-4 py-2 rounded-lg transition-colors shadow-sm"
                 >
                   {saveState === 'saving' ? <Loader2 className="w-4 h-4 animate-spin" /> : saveState === 'saved' ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                  <span>{saveState === 'saved' ? 'Saved' : 'Save'}</span>
+                  <span>{saveState === 'saved' ? 'Tersimpan' : 'Simpan'}</span>
                 </button>
+                {provider && (
+                  <button
+                    onClick={() => setIsAssistantOpen(true)}
+                    className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Asisten riset</span>
+                  </button>
+                )}
                 <button
                   onClick={() => downloadSpssSyntax(dataset)}
-                  title="SPSS syntax that imports the CSV with labels and measurement levels"
+                  title="Sintaks SPSS yang mengimpor CSV beserta label dan tingkat pengukuran"
                   className="flex items-center space-x-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg transition-colors shadow-sm"
                 >
                   <FileCode className="w-4 h-4" />
-                  <span>SPSS syntax (.sps)</span>
+                  <span>Sintaks SPSS (.sps)</span>
                 </button>
                 <button
                   onClick={() => downloadCsv(dataset)}
                   className="flex items-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors shadow-md"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download .CSV</span>
+                  <span>Unduh .CSV</span>
                 </button>
               </div>
             </div>
@@ -344,8 +367,8 @@ const App: React.FC = () => {
             <div className="flex items-start gap-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               <div>
-                <p className="font-medium">Check these numbers against the sources before you use them.</p>
-                <p className="mt-0.5">An AI model collected this data and it can contain mistakes.</p>
+                <p className="font-medium">Cocokkan angka-angka ini dengan sumbernya sebelum dipakai.</p>
+                <p className="mt-0.5">Data ini dikumpulkan oleh model AI dan bisa mengandung kesalahan.</p>
                 {dataset.warnings.length > 0 && (
                   <ul className="mt-2 list-disc pl-5 space-y-0.5">
                     {dataset.warnings.map((w, i) => (
@@ -384,10 +407,10 @@ const App: React.FC = () => {
                   {activeTab === 'data' ? (
                     <DataView key={dataset.retrievedAt} dataset={dataset} />
                   ) : (
-                    <VariableView variables={dataset.variables} />
+                    <VariableView dataset={dataset} onUpdateDataset={handleUpdateDataset} />
                   )}
                   <div className="bg-slate-50 px-6 py-2 border-t border-slate-200 text-xs text-slate-500 text-right">
-                    {dataset.data.length} rows &bull; {dataset.variables.length} variables
+                    {dataset.data.length} baris &bull; {dataset.variables.length} variabel
                   </div>
                 </div>
 
@@ -400,7 +423,7 @@ const App: React.FC = () => {
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                   <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center">
                     <Search className="w-4 h-4 mr-2 text-slate-400" />
-                    Data Sources
+                    Sumber Data
                   </h3>
                   <ul className="space-y-2">
                     {dataset.sources.length > 0 ? (
@@ -418,7 +441,7 @@ const App: React.FC = () => {
                         </li>
                       ))
                     ) : (
-                      <li className="text-xs text-slate-500">The AI did not return any source links.</li>
+                      <li className="text-xs text-slate-500">AI tidak menyertakan tautan sumber.</li>
                     )}
                   </ul>
                 </div>
@@ -427,6 +450,16 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {dataset && provider && (
+        <ChatAssistant
+          dataset={dataset}
+          providerId={provider.id}
+          providerLabel={provider.label}
+          isOpen={isAssistantOpen}
+          onClose={() => setIsAssistantOpen(false)}
+        />
+      )}
 
       <SavedDatasetsModal
         isOpen={isSavedModalOpen}
