@@ -1,0 +1,65 @@
+export type VariableType = 'Numeric' | 'String' | 'Date';
+export type MeasureType = 'Scale' | 'Ordinal' | 'Nominal';
+export type SearchMode = 'fast' | 'deep';
+export type CellValue = string | number | null;
+
+export interface SPSSVariable {
+  name: string;
+  type: VariableType;
+  width: number;
+  decimals: number;
+  label: string;
+  measure: MeasureType;
+}
+
+export interface DataSource {
+  url: string;
+  title: string;
+}
+
+export interface SPSSDataset {
+  id?: number;
+  title: string;
+  description: string;
+  suggestedAnalysis: string;
+  variables: SPSSVariable[];
+  data: Record<string, CellValue>[];
+  sources: DataSource[];
+  warnings: string[];
+  provider: string;
+  providerLabel: string;
+  model: string;
+  mode: SearchMode;
+  query: string;
+  retrievedAt: string;
+  savedAt?: string;
+}
+
+export interface DatasetSummary {
+  id: number;
+  title: string;
+  description: string;
+  rowCount: number;
+  savedAt: string;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: 'user' | 'admin';
+}
+
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  models: { fast: string; deep: string };
+}
+
+export interface Quota {
+  used: number;
+  usedDeep: number;
+  limit: number;
+  limitDeep: number;
+  unlimited: boolean;
+}

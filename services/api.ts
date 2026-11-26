@@ -1,0 +1,52 @@
+import { DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: 'same-origin',
+      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    });
+  } catch {
+    throw new ApiError('Could not reach the server. Check your connection and try again.', 0);
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      typeof payload?.error === 'string' && payload.error
+        ? payload.error
+        : 'Something went wrong. Please try again.',
+      response.status
+    );
+  }
+  return payload as T;
+}
+
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: 'POST', body: JSON.stringify(body) });
+
+export const api = {
+  me: () => request<{ user: User | null; allowRegistration: boolean }>('/api/auth/me'),
+  login: (email: string, password: string) =>
+    post<{ user: User }>('/api/auth/login', { email, password }),
+  register: (name: string, email: string, password: string) =>
+    post<{ user: User }>('/api/auth/register', { name, email, password }),
+  logout: () => post<{ ok: true }>('/api/auth/logout', {}),
+
+  providers: () => request<{ providers: ProviderInfo[]; quota: Quota }>('/api/providers'),
+  search: (query: string, provider: string, mode: SearchMode) =>
+    post<SPSSDataset>('/api/search', { query, provider, mode }),
+
+  listDatasets: () => request<{ datasets: DatasetSummary[] }>('/api/datasets'),
+  getDataset: (id: number) => request<SPSSDataset>(`/api/datasets/${id}`),
+  saveDataset: (dataset: SPSSDataset) =>
+    post<{ dataset: DatasetSummary }>('/api/datasets', dataset),
+  deleteDataset: (id: number) => request<{ ok: true }>(`/api/datasets/${id}`, { method: 'DELETE' }),
+};

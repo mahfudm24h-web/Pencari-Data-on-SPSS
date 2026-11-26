@@ -1,0 +1,75 @@
+name: Deploy
+
+# Builds the image, pushes it to GitHub Container Registry, then updates the VPS.
+# Required repository secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY.
+# The app must already be set up once on the server in /opt/datascout (see README).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push image
+        id: image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build -t "$image:$GITHUB_SHA" -t "$image:latest" .
+          docker push "$image:$GITHUB_SHA"
+          docker push "$image:latest"
+          echo "ref=$image:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update the server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          scp -i ~/.ssh/deploy_key docker-compose.yml "$VPS_USER@$VPS_HOST:/opt/datascout/docker-compose.yml"
+          ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
+            "GH_TOKEN='$GH_TOKEN' GH_ACTOR='$GITHUB_ACTOR' IMAGE_REF='$IMAGE_REF' sh -s" <<'REMOTE'
+          set -eu
+          cd /opt/datascout
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          # Record the deployed image in .env so later manual restarts use it too.
+          sed -i '/^APP_IMAGE=/d' .env
+          echo "APP_IMAGE=$IMAGE_REF" >> .env
+          docker compose pull app
+          docker compose up -d --no-build
+          docker logout ghcr.io
+          docker image prune -f
+          REMOTE
