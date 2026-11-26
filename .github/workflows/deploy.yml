@@ -66,8 +66,9 @@ jobs:
           cd /opt/datascout
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
           # Record the deployed image in .env so later manual restarts use it too.
-          sed -i '/^APP_IMAGE=/d' .env
+          sed -i -e '/^APP_IMAGE=/d' -e '/^APP_PULL_POLICY=/d' .env
           echo "APP_IMAGE=$IMAGE_REF" >> .env
+          echo "APP_PULL_POLICY=always" >> .env
           docker compose pull app
           docker compose up -d --no-build
           docker logout ghcr.io
