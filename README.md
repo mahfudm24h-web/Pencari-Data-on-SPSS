@@ -8,6 +8,10 @@ Describe the data you need; an AI model searches the web for it and returns a da
 - **Database:** PostgreSQL (accounts, sessions, saved datasets, search log)
 - **AI providers:** Google Gemini and Anthropic Claude, chosen per search. Only providers whose API key is
   set on the server appear in the app.
+- **BPS source (optional):** with a BPS WebAPI key, users can fetch official Statistics Indonesia figures
+  directly (region → subject → variable → years), with no AI involved.
+- **Also:** editable Variable View with value labels, a chart picker, descriptive statistics with skewness,
+  and a research assistant that answers questions about the open dataset. The interface is in Indonesian.
 
 > The data is collected by an AI model and can contain mistakes. The app shows the sources and a warning
 > with every dataset; users should check numbers against the sources before using them.
@@ -36,7 +40,7 @@ and has no daily search limit.
 |---|---|
 | `npm run dev` | Development server with hot reload |
 | `npm run lint` | Type check |
-| `npm test` | Unit tests (number parsing, dataset validation) |
+| `npm test` | Unit tests (number parsing, dataset validation, BPS response parsing) |
 | `npm run build` | Build the frontend (`dist/`) and server (`dist-server/`) |
 | `npm start` | Run the production build |
 
@@ -47,9 +51,10 @@ All settings are environment variables; see [.env.example](.env.example).
 | Variable | Purpose |
 |---|---|
 | `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` | API keys. Set one or both. |
+| `BPS_API_KEY` | Optional. Turns on the direct BPS source. |
 | `GEMINI_MODEL_FAST`, `GEMINI_MODEL_DEEP`, `CLAUDE_MODEL` | Model overrides. |
 | `ALLOW_REGISTRATION` | `false` closes sign-up (the first account can always be created). |
-| `DAILY_SEARCH_LIMIT`, `DAILY_DEEP_LIMIT` | Per-user limits per 24 hours. |
+| `DAILY_SEARCH_LIMIT`, `DAILY_DEEP_LIMIT`, `DAILY_CHAT_LIMIT` | Per-user limits per 24 hours (searches, deep searches, assistant questions). |
 | `DATABASE_URL` | PostgreSQL connection string (set automatically in Docker). |
 
 ## Deploy to a VPS with Docker and Traefik

@@ -21,6 +21,7 @@ export const config = {
   geminiApiKey: str("GEMINI_API_KEY"),
   geminiModelFast: str("GEMINI_MODEL_FAST", "gemini-3-flash-preview"),
   geminiModelDeep: str("GEMINI_MODEL_DEEP", "gemini-3-pro-preview"),
+  bpsApiKey: str("BPS_API_KEY"),
   anthropicApiKey: str("ANTHROPIC_API_KEY"),
   claudeModel: str("CLAUDE_MODEL", "claude-opus-5-5"),
 };

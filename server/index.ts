@@ -3,6 +3,7 @@ import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { authRouter, loadUser, requireUser } from "./auth";
+import { fetchBpsDataset, listDomains, listPeriods, listSubjects, listVariables, MAX_PERIODS } from "./bps";
 import { config } from "./config";
 import { normalizeDataset } from "./dataset";
 import { migrate, pool } from "./db";
@@ -50,6 +51,7 @@ async function main() {
         label: p.label,
         models: { fast: p.modelFor("fast"), deep: p.modelFor("deep") },
       })),
+      bps: Boolean(config.bpsApiKey),
       quota: {
         used: used.total,
         usedDeep: used.deep,
@@ -140,6 +142,53 @@ async function main() {
       clearTimeout(timer);
     }
   });
+
+  // --- BPS: official statistics fetched directly, no AI involved ---
+  const bpsLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `user:${(req as Request).user?.id}`,
+    message: { error: "Terlalu banyak permintaan ke BPS. Tunggu sebentar." },
+  });
+  const bps = express.Router();
+  bps.use(requireUser, bpsLimiter);
+  bps.get("/domains", async (_req, res) => res.json({ items: await listDomains() }));
+  bps.get("/subjects", async (req, res) => res.json({ items: await listSubjects(String(req.query.domain)) }));
+  bps.get("/variables", async (req, res) =>
+    res.json({ items: await listVariables(String(req.query.domain), String(req.query.subject)) })
+  );
+  bps.get("/periods", async (req, res) =>
+    res.json({ items: await listPeriods(String(req.query.domain), String(req.query.variable)), max: MAX_PERIODS })
+  );
+  bps.post("/dataset", async (req, res) => {
+    const periods: unknown[] = Array.isArray(req.body?.periods) ? req.body.periods : [];
+    const dataset = await fetchBpsDataset(String(req.body?.domain), String(req.body?.variable), periods.map(String));
+    pool
+      .query(
+        `INSERT INTO search_logs (user_id, provider, model, mode, query, status) VALUES ($1, 'bps', '', 'bps', $2, 'ok')`,
+        [req.user!.id, dataset.title.slice(0, 500)]
+      )
+      .catch((err) => console.error("Failed to write BPS log:", err));
+    res.json({
+      ...dataset,
+      provider: "bps",
+      providerLabel: "WebAPI BPS",
+      model: "",
+      mode: "bps",
+      query: dataset.title,
+      retrievedAt: new Date().toISOString(),
+    });
+  });
+  bps.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof ProviderError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
+  });
+  app.use("/api/bps", bps);
 
   const assistantLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -315,6 +364,7 @@ async function main() {
   app.listen(config.port, "0.0.0.0", () => {
     console.log(`Server running on port ${config.port}`);
     const names = availableProviders().map((p) => p.label);
+    if (config.bpsApiKey) console.log("BPS WebAPI source: on");
     console.log(names.length ? `AI providers: ${names.join(", ")}` : "Warning: no AI provider API key is set.");
   });
 }

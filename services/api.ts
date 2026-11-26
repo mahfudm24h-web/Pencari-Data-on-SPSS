@@ -1,4 +1,4 @@
-import { DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
+import { BpsOption, DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -40,12 +40,23 @@ export const api = {
     post<{ user: User }>('/api/auth/register', { name, email, password }),
   logout: () => post<{ ok: true }>('/api/auth/logout', {}),
 
-  providers: () => request<{ providers: ProviderInfo[]; quota: Quota }>('/api/providers'),
+  providers: () => request<{ providers: ProviderInfo[]; bps: boolean; quota: Quota }>('/api/providers'),
   search: (query: string, provider: string, mode: SearchMode) =>
     post<SPSSDataset>('/api/search', { query, provider, mode }),
 
   askAssistant: (provider: string, context: string, messages: { role: 'user' | 'assistant'; text: string }[]) =>
     post<{ text: string; model: string; providerLabel: string }>('/api/assistant', { provider, context, messages }),
+
+  bps: {
+    domains: () => request<{ items: BpsOption[] }>('/api/bps/domains'),
+    subjects: (domain: string) => request<{ items: BpsOption[] }>(`/api/bps/subjects?domain=${domain}`),
+    variables: (domain: string, subject: string) =>
+      request<{ items: BpsOption[] }>(`/api/bps/variables?domain=${domain}&subject=${subject}`),
+    periods: (domain: string, variable: string) =>
+      request<{ items: BpsOption[] }>(`/api/bps/periods?domain=${domain}&variable=${variable}`),
+    dataset: (domain: string, variable: string, periods: string[]) =>
+      post<SPSSDataset>('/api/bps/dataset', { domain, variable, periods }),
+  },
 
   listDatasets: () => request<{ datasets: DatasetSummary[] }>('/api/datasets'),
   getDataset: (id: number) => request<SPSSDataset>(`/api/datasets/${id}`),

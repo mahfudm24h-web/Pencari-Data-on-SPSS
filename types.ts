@@ -36,7 +36,7 @@ export interface SPSSDataset {
   provider: string;
   providerLabel: string;
   model: string;
-  mode: SearchMode;
+  mode: SearchMode | 'bps';
   query: string;
   retrievedAt: string;
   savedAt?: string;
@@ -55,6 +55,11 @@ export interface User {
   email: string;
   name: string;
   role: 'user' | 'admin';
+}
+
+export interface BpsOption {
+  id: string;
+  name: string;
 }
 
 export interface ProviderInfo {

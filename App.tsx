@@ -6,6 +6,7 @@ import {
 import { api, ApiError } from './services/api';
 import { downloadCsv, downloadSpssSyntax } from './services/export';
 import { DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from './types';
+import BpsPanel from './components/BpsPanel';
 import ChatAssistant from './components/ChatAssistant';
 import SearchLoader from './components/SearchLoader';
 import AuthScreen from './components/AuthScreen';
@@ -37,6 +38,8 @@ const App: React.FC = () => {
   const [quota, setQuota] = useState<Quota | null>(null);
   const [providerId, setProviderId] = useState(readStoredProvider);
   const [mode, setMode] = useState<SearchMode>('fast');
+  const [bpsEnabled, setBpsEnabled] = useState(false);
+  const [source, setSource] = useState<'ai' | 'bps'>('ai');
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,6 +62,7 @@ const App: React.FC = () => {
     const result = await api.providers();
     setProviders(result.providers);
     setQuota(result.quota);
+    setBpsEnabled(result.bps);
     setProviderId((current) =>
       result.providers.some((p) => p.id === current) ? current : result.providers[0]?.id ?? ''
     );
@@ -106,6 +110,21 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
       refreshProviders().catch(() => undefined);
+    }
+  };
+
+  const handleBpsFetch = async (load: () => Promise<SPSSDataset>) => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    setDataset(null);
+    setSaveState('idle');
+    try {
+      setDataset(await load());
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -221,10 +240,34 @@ const App: React.FC = () => {
         <div className="max-w-3xl mx-auto mb-12 text-center">
           <h2 className="text-3xl font-bold text-slate-900 mb-4">Cari Data Nyata untuk Analisis</h2>
           <p className="text-slate-600 mb-8">
-            Tuliskan data ekonomi, sosial, atau ilmiah yang Anda butuhkan. Model AI mencarinya di web lalu
-            menyusunnya untuk SPSS (Variable View &amp; Data View).
+            {bpsEnabled && source === 'bps'
+              ? 'Pilih wilayah, subjek, dan variabel. Angkanya diambil langsung dari Badan Pusat Statistik dan disusun untuk SPSS.'
+              : 'Tuliskan data ekonomi, sosial, atau ilmiah yang Anda butuhkan. Model AI mencarinya di web lalu menyusunnya untuk SPSS (Variable View & Data View).'}
           </p>
 
+          {bpsEnabled && (
+            <div className="inline-flex mb-6 p-1 bg-slate-200/70 rounded-lg" role="tablist" aria-label="Sumber data">
+              {([['ai', 'Pencarian AI'], ['bps', 'BPS langsung']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={source === id}
+                  disabled={loading}
+                  onClick={() => setSource(id)}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    source === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {bpsEnabled && source === 'bps' ? (
+            <BpsPanel loading={loading} onFetch={handleBpsFetch} onError={handleError} />
+          ) : (
+          <>
           <form onSubmit={handleSearch} className="relative group">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
@@ -294,13 +337,15 @@ const App: React.FC = () => {
               {searchesLeft !== null && ` Sisa ${searchesLeft} dari ${quota!.limit} pencarian hari ini.`}
             </p>
           )}
+          </>
+          )}
         </div>
 
         {loading && (
           <SearchLoader
-            label={`Mencari di web dengan ${provider?.label ?? 'AI'}…`}
-            slowHint={mode === 'deep' ? 'Pencarian mendalam bisa makan sampai tujuh menit.' : 'Ini lebih lama dari biasanya. Pencarian dihentikan otomatis setelah tiga menit.'}
-            slowAfterSeconds={mode === 'deep' ? 180 : 60}
+            label={source === 'bps' && bpsEnabled ? 'Mengambil data dari WebAPI BPS…' : `Mencari di web dengan ${provider?.label ?? 'AI'}…`}
+            slowHint={source === 'bps' && bpsEnabled ? 'Server BPS sedang lambat. Permintaan dihentikan otomatis setelah 30 detik.' : mode === 'deep' ? 'Pencarian mendalam bisa makan sampai tujuh menit.' : 'Ini lebih lama dari biasanya. Pencarian dihentikan otomatis setelah tiga menit.'}
+            slowAfterSeconds={source === 'bps' && bpsEnabled ? 15 : mode === 'deep' ? 180 : 60}
           />
         )}
 
@@ -317,7 +362,7 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-bold text-slate-900">{dataset.title}</h2>
                 <p className="text-slate-600 mt-1 max-w-2xl">{dataset.description}</p>
                 <p className="text-xs text-slate-500 mt-2">
-                  Dikumpulkan oleh {dataset.providerLabel}
+                  {dataset.provider === 'bps' ? 'Diambil langsung dari' : 'Dikumpulkan oleh'} {dataset.providerLabel}
                   {dataset.model && ` (${dataset.model})`} pada{' '}
                   {new Date(dataset.retrievedAt).toLocaleDateString('id-ID', { dateStyle: 'long' })}
                 </p>
@@ -364,6 +409,22 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {dataset.provider === 'bps' ? (
+              <div className="flex items-start gap-3 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                <Check className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Angka resmi dari Badan Pusat Statistik, diambil tanpa AI.</p>
+                  <p className="mt-0.5">Sel kosong berarti BPS tidak menerbitkan nilai untuk wilayah dan tahun itu.</p>
+                  {dataset.warnings.length > 0 && (
+                    <ul className="mt-2 list-disc pl-5 space-y-0.5">
+                      {dataset.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ) : (
             <div className="flex items-start gap-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               <div>
@@ -378,6 +439,7 @@ const App: React.FC = () => {
                 )}
               </div>
             </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-6 min-w-0">
