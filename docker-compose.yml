@@ -1,9 +1,13 @@
 # Production stack for a VPS that already runs Traefik (Hostinger "Docker and Traefik" template).
+# That Traefik runs in host network mode and discovers containers through the Docker socket,
+# so the app only needs its own default network; no shared Traefik network is required.
 # Settings come from the .env file next to this file; see .env.example.
 services:
   app:
     image: ${APP_IMAGE:-spss-datascout:local}
-    build: .
+    build: ${APP_BUILD_CONTEXT:-.}
+    # Build on the server when no ready-made image (APP_IMAGE) is set; managed Docker UIs run `up` without --build.
+    pull_policy: ${APP_PULL_POLICY:-build}
     restart: unless-stopped
     depends_on:
       db:
@@ -22,16 +26,12 @@ services:
       DAILY_SEARCH_LIMIT: ${DAILY_SEARCH_LIMIT:-20}
       DAILY_DEEP_LIMIT: ${DAILY_DEEP_LIMIT:-5}
       DAILY_CHAT_LIMIT: ${DAILY_CHAT_LIMIT:-50}
-    networks:
-      - internal
-      - proxy
     labels:
       - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:?Set TRAEFIK_NETWORK in .env}
       - traefik.http.routers.datascout.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN in .env}`)
       - traefik.http.routers.datascout.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.datascout.tls=true
-      - traefik.http.routers.datascout.tls.certresolver=${TRAEFIK_CERTRESOLVER:?Set TRAEFIK_CERTRESOLVER in .env}
+      - traefik.http.routers.datascout.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
       - traefik.http.services.datascout.loadbalancer.server.port=3000
 
   db:
@@ -48,14 +48,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - internal
 
 volumes:
   db-data:
-
-networks:
-  internal:
-  proxy:
-    name: ${TRAEFIK_NETWORK}
-    external: true

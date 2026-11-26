@@ -59,46 +59,32 @@ All settings are environment variables; see [.env.example](.env.example).
 
 ## Deploy to a VPS with Docker and Traefik
 
-These steps fit the Hostinger "Ubuntu 24.04 with Docker and Traefik" template. The app joins the existing
-Traefik network; Traefik routes the domain to it and issues the HTTPS certificate.
+These steps fit the Hostinger "Ubuntu 24.04 with Docker and Traefik" template. That Traefik runs in host
+network mode, so the app needs no shared Docker network. Traefik finds it through its labels, routes the
+domain to it and issues the HTTPS certificate (resolver `letsencrypt`, entrypoint `websecure`).
 
-1. **DNS:** add an `A` record for your subdomain (for example `spss`) pointing to the VPS IP address.
+1. **Domain:** every Hostinger VPS answers on `*.srvNNNNNNN.hstgr.cloud`, so something like
+   `datascout.srv2174202.hstgr.cloud` works at once with no DNS change. For your own domain, add an `A`
+   record for the subdomain pointing to the VPS IP address and use it as `APP_DOMAIN`.
 
-2. **Find your Traefik settings** on the server:
-
-   ```bash
-   docker network ls
-   ```
-
-   ```bash
-   docker inspect traefik --format '{{json .Args}}'
-   ```
-
-   Note the network Traefik is attached to, the certificate resolver name
-   (`--certificatesresolvers.<name>...`) and the HTTPS entrypoint name (`--entrypoints.<name>.address=:443`).
-
-3. **Set up the app folder** (once):
+2. **Create the project.** In hPanel open *VPS > Docker Manager > Compose* and create a project from
+   `docker-compose.yml`, or on the server:
 
    ```bash
    mkdir -p /opt/datascout && cd /opt/datascout
-   ```
-
-   Copy `docker-compose.yml`, `.env.example` and the `deploy/` folder there, then:
-
-   ```bash
    cp .env.example .env && chmod 600 .env && nano .env
    ```
 
-   Fill in `POSTGRES_PASSWORD`, `APP_DOMAIN`, the three `TRAEFIK_*` values and your API keys.
+   Fill in `POSTGRES_PASSWORD`, `APP_DOMAIN` and your API keys. To build straight from GitHub without
+   cloning, set `APP_BUILD_CONTEXT=https://github.com/OWNER/REPO.git#main`.
 
-4. **Start it.** Either let GitHub Actions deploy (below), or build on the server from a clone of this
-   repository:
+3. **Start it.** Either let GitHub Actions deploy (below), or build on the server:
 
    ```bash
    docker compose up -d --build
    ```
 
-5. Open `https://<APP_DOMAIN>` and register. That first account is the administrator. Once your users have
+4. Open `https://<APP_DOMAIN>` and register. That first account is the administrator. Once your users have
    registered, set `ALLOW_REGISTRATION=false` in `.env` and run `docker compose up -d`.
 
 ### Automatic deploys
