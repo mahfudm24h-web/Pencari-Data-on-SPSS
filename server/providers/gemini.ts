@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { config } from "../config";
 import { extractJson } from "../dataset";
 import { SYSTEM_INSTRUCTION, userPrompt } from "./prompt";
-import { Provider, ProviderError, ProviderResult, SearchMode } from "./types";
+import { ChatResult, ChatTurn, Provider, ProviderError, ProviderResult, SearchMode } from "./types";
 
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -43,6 +43,26 @@ function statusOf(error: unknown): number | undefined {
   return undefined;
 }
 
+function mapError(error: unknown, signal: AbortSignal, model: string): unknown {
+  if (signal.aborted) return new ProviderError("Permintaan terlalu lama dan dihentikan.", 504);
+  const status = statusOf(error);
+  const message = error instanceof Error ? error.message : "";
+  if (status === 401 || status === 403 || message.includes("API key not valid")) {
+    return new ProviderError("Kunci API Gemini ditolak. Minta administrator memeriksanya.", 502);
+  }
+  if (status === 429) {
+    return new ProviderError("Batas pemakaian Gemini tercapai. Coba lagi nanti atau pilih model lain.", 429);
+  }
+  if (status === 404) {
+    return new ProviderError(`Model Gemini "${model}" tidak tersedia. Minta administrator memperbaruinya.`, 502);
+  }
+  // fetch() reports network failures as TypeError.
+  if (error instanceof TypeError) {
+    return new ProviderError("Tidak bisa menghubungi Gemini. Coba lagi sebentar lagi.", 502);
+  }
+  return error;
+}
+
 export const geminiProvider: Provider = {
   id: "gemini",
   label: "Google Gemini",
@@ -67,27 +87,11 @@ export const geminiProvider: Provider = {
         },
       });
     } catch (error) {
-      if (signal.aborted) throw new ProviderError("The search took too long and was stopped.", 504);
-      const status = statusOf(error);
-      const message = error instanceof Error ? error.message : "";
-      if (status === 401 || status === 403 || message.includes("API key not valid")) {
-        throw new ProviderError("The Gemini API key was rejected. Ask the administrator to check it.", 502);
-      }
-      if (status === 429) {
-        throw new ProviderError("Gemini's usage limit was reached. Try again later or pick another model.", 429);
-      }
-      if (status === 404) {
-        throw new ProviderError(`Gemini model "${model}" is not available. Ask the administrator to update it.`, 502);
-      }
-      if (error instanceof TypeError) {
-        // fetch() reports network failures as TypeError.
-        throw new ProviderError("Could not reach Gemini. Please try again in a moment.", 502);
-      }
-      throw error;
+      throw mapError(error, signal, model);
     }
 
     const text = response.text;
-    if (!text) throw new ProviderError("Gemini returned no data. Try rephrasing the request.");
+    if (!text) throw new ProviderError("Gemini tidak mengembalikan data. Coba ubah kalimat permintaan.");
 
     const sources: { url: string; title?: string }[] = [];
     for (const chunk of response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []) {
@@ -104,5 +108,27 @@ export const geminiProvider: Provider = {
         (response.usageMetadata?.candidatesTokenCount ?? 0) +
         (response.usageMetadata?.thoughtsTokenCount ?? 0),
     };
+  },
+  async chat(system: string, turns: ChatTurn[], signal: AbortSignal): Promise<ChatResult> {
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+    const model = config.geminiModelFast;
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: turns.map((t) => ({ role: t.role === "user" ? "user" : "model", parts: [{ text: t.text }] })),
+        config: { systemInstruction: system, abortSignal: signal },
+      });
+      if (!response.text) throw new ProviderError("Gemini tidak memberi jawaban. Coba lagi.");
+      return {
+        text: response.text,
+        model: response.modelVersion || model,
+        inputTokens: response.usageMetadata?.promptTokenCount,
+        outputTokens:
+          (response.usageMetadata?.candidatesTokenCount ?? 0) +
+          (response.usageMetadata?.thoughtsTokenCount ?? 0),
+      };
+    } catch (error) {
+      throw error instanceof ProviderError ? error : mapError(error, signal, model);
+    }
   },
 };

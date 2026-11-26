@@ -25,9 +25,9 @@ const SavedDatasetsModal: React.FC<Props> = ({ isOpen, onClose, datasets, onLoad
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg leading-6 font-medium text-slate-900 flex items-center" id="modal-title">
                 <Database className="w-5 h-5 mr-2 text-blue-600" />
-                Saved Datasets
+                Dataset Tersimpan
               </h3>
-              <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-500">
+              <button onClick={onClose} aria-label="Tutup" className="text-slate-400 hover:text-slate-500">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -36,7 +36,7 @@ const SavedDatasetsModal: React.FC<Props> = ({ isOpen, onClose, datasets, onLoad
               {datasets.length === 0 ? (
                 <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-lg">
                   <Database className="mx-auto h-10 w-10 text-slate-300" />
-                  <p className="mt-2 text-sm text-slate-500">No saved datasets found.</p>
+                  <p className="mt-2 text-sm text-slate-500">Belum ada dataset tersimpan.</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -53,9 +53,9 @@ const SavedDatasetsModal: React.FC<Props> = ({ isOpen, onClose, datasets, onLoad
                           {ds.savedAt && (
                             <div className="flex items-center mt-1.5 text-xs text-slate-400">
                               <Calendar className="flex-shrink-0 mr-1 h-3 w-3" />
-                              <span>{new Date(ds.savedAt).toLocaleDateString()} &bull; {new Date(ds.savedAt).toLocaleTimeString()}</span>
+                              <span>{new Date(ds.savedAt).toLocaleDateString('id-ID')} &bull; {new Date(ds.savedAt).toLocaleTimeString('id-ID')}</span>
                               <span className="ml-2 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                                {ds.rowCount} rows
+                                {ds.rowCount} baris
                               </span>
                             </div>
                           )}
@@ -64,7 +64,7 @@ const SavedDatasetsModal: React.FC<Props> = ({ isOpen, onClose, datasets, onLoad
                            <button
                             onClick={() => onLoad(ds.id)}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                            title="Load Dataset"
+                            title="Buka dataset" aria-label={`Buka ${ds.title}`}
                           >
                             <ChevronRight className="w-5 h-5" />
                           </button>
@@ -74,7 +74,7 @@ const SavedDatasetsModal: React.FC<Props> = ({ isOpen, onClose, datasets, onLoad
                                 onDelete(ds.id);
                             }}
                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                            title="Delete"
+                            title="Hapus" aria-label={`Hapus ${ds.title}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

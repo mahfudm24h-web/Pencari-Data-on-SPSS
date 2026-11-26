@@ -1,0 +1,90 @@
+# Variant for panels that only run `docker compose up --no-build` (Hostinger Docker Manager).
+# It needs no prebuilt image: the app container clones the repository, builds it and keeps the result
+# in a volume. On every start it checks the branch and rebuilds if there is a newer commit, so
+# restarting the project updates the app. A failed build keeps the previous version running.
+# Same settings as docker-compose.yml; see .env.example.
+services:
+  app:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /srv
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-src:/srv
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        # Rebuild when nothing is built yet, when REBUILD=1, or when the branch has a newer commit
+        # than the one that was built. Restarting the project is therefore enough to update the app.
+        want=""
+        if apk add --no-cache git >/dev/null 2>&1; then
+          want=$$(git ls-remote "$$REPO_URL" "$$REPO_REF" 2>/dev/null | head -n 1 | cut -f1) || want=""
+        fi
+        have=$$(cat /srv/app/.built-commit 2>/dev/null || true)
+        if [ ! -f /srv/app/dist-server/index.js ] || [ "$${REBUILD:-}" = "1" ] || { [ -n "$$want" ] && [ "$$want" != "$$have" ]; }; then
+          echo "Building $$REPO_REF ($${want:-commit unknown})"
+          rm -rf /srv/build
+          # Build in a separate folder so a failed build leaves the running version untouched.
+          if git clone --depth 1 --branch "$$REPO_REF" "$$REPO_URL" /srv/build && cd /srv/build && npm ci && npm run build && npm prune --omit=dev; then
+            git -C /srv/build rev-parse HEAD > /srv/build/.built-commit
+            cd /srv && rm -rf /srv/app && mv /srv/build /srv/app
+          else
+            echo "Build failed; keeping the previous version." >&2
+            cd /srv && rm -rf /srv/build
+            [ -f /srv/app/dist-server/index.js ] || exit 1
+          fi
+        fi
+        cd /srv/app
+        NODE_ENV=production exec node dist-server/index.js
+    environment:
+      PORT: "3000"
+      REPO_URL: ${REPO_URL:-https://github.com/mahfudm24h-web/Pencari-Data-on-SPSS.git}
+      REPO_REF: ${REPO_REF:-main}
+      REBUILD: ${REBUILD:-}
+      DATABASE_URL: postgres://datascout:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/datascout
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_FAST: ${GEMINI_MODEL_FAST:-}
+      GEMINI_MODEL_DEEP: ${GEMINI_MODEL_DEEP:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BPS_API_KEY: ${BPS_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      DAILY_SEARCH_LIMIT: ${DAILY_SEARCH_LIMIT:-20}
+      DAILY_DEEP_LIMIT: ${DAILY_DEEP_LIMIT:-5}
+      DAILY_CHAT_LIMIT: ${DAILY_CHAT_LIMIT:-50}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 600s
+      retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.datascout.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN in .env}`)
+      - traefik.http.routers.datascout.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.datascout.tls=true
+      - traefik.http.routers.datascout.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.datascout.loadbalancer.server.port=3000
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: datascout
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: datascout
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datascout -d datascout"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:
+  app-src:

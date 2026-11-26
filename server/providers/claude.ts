@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config";
 import { extractJson } from "../dataset";
 import { DATASET_JSON_SCHEMA, SYSTEM_INSTRUCTION, userPrompt } from "./prompt";
-import { Provider, ProviderError, ProviderResult, SearchMode } from "./types";
+import { ChatResult, ChatTurn, Provider, ProviderError, ProviderResult, SearchMode } from "./types";
 
 /** How many times a long web-search turn may be resumed after the server pauses it. */
 const MAX_CONTINUATIONS = 4;
@@ -64,7 +64,7 @@ export const claudeProvider: Provider = {
         }
 
         if (message.stop_reason === "refusal") {
-          throw new ProviderError("Claude declined this request. Try rephrasing it.", 422);
+          throw new ProviderError("Claude menolak permintaan ini. Coba ubah kalimatnya.", 422);
         }
         if (message.stop_reason === "pause_turn" && turn < MAX_CONTINUATIONS) {
           // The server paused a long search; sending the turn back resumes it.
@@ -72,10 +72,10 @@ export const claudeProvider: Provider = {
           continue;
         }
         if (message.stop_reason === "max_tokens") {
-          throw new ProviderError("The dataset was too large to finish. Ask for a narrower range.");
+          throw new ProviderError("Dataset terlalu besar untuk diselesaikan. Minta rentang yang lebih sempit.");
         }
         if (message.stop_reason !== "end_turn") {
-          throw new ProviderError("Claude did not finish the search. Please try again.");
+          throw new ProviderError("Claude tidak menyelesaikan pencarian. Silakan coba lagi.");
         }
 
         // The JSON answer is the text after the last search result.
@@ -84,28 +84,66 @@ export const claudeProvider: Provider = {
           if (block.type === "text") text += block.text;
           else if (block.type === "web_search_tool_result") text = "";
         }
-        if (!text.trim()) throw new ProviderError("Claude returned no data. Try rephrasing the request.");
+        if (!text.trim()) throw new ProviderError("Claude tidak mengembalikan data. Coba ubah kalimat permintaan.");
 
         return { raw: extractJson(text), sources, model: message.model, inputTokens, outputTokens };
       }
     } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      if (signal.aborted || error instanceof Anthropic.APIUserAbortError) {
-        throw new ProviderError("The search took too long and was stopped.", 504);
+      throw mapError(error, signal);
+    }
+  },
+
+  async chat(system: string, turns: ChatTurn[], signal: AbortSignal): Promise<ChatResult> {
+    const client = new Anthropic({ apiKey: config.anthropicApiKey });
+    try {
+      const message = await client.beta.messages
+        .stream(
+          {
+            model: config.claudeModel,
+            max_tokens: 16000,
+            system,
+            messages: turns.map((t) => ({ role: t.role, content: t.text })),
+            output_config: { effort: "low" },
+            betas: ["server-side-fallback-2026-07-01"],
+            fallbacks: "default",
+          },
+          { signal }
+        )
+        .finalMessage();
+
+      if (message.stop_reason === "refusal") {
+        throw new ProviderError("Claude menolak pertanyaan ini. Coba ubah kalimatnya.", 422);
       }
-      if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-        throw new ProviderError("The Claude API key was rejected. Ask the administrator to check it.", 502);
-      }
-      if (error instanceof Anthropic.NotFoundError) {
-        throw new ProviderError(`Claude model "${config.claudeModel}" is not available. Ask the administrator to update it.`, 502);
-      }
-      if (error instanceof Anthropic.RateLimitError) {
-        throw new ProviderError("Claude's usage limit was reached. Try again later or pick another model.", 429);
-      }
-      if (error instanceof Anthropic.APIConnectionError) {
-        throw new ProviderError("Could not reach Claude. Please try again in a moment.", 502);
-      }
-      throw error;
+      const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+      if (!text) throw new ProviderError("Claude tidak memberi jawaban. Coba lagi.");
+      return {
+        text,
+        model: message.model,
+        inputTokens: message.usage.input_tokens,
+        outputTokens: message.usage.output_tokens,
+      };
+    } catch (error) {
+      throw mapError(error, signal);
     }
   },
 };
+
+function mapError(error: unknown, signal: AbortSignal): unknown {
+  if (error instanceof ProviderError) return error;
+  if (signal.aborted || error instanceof Anthropic.APIUserAbortError) {
+    return new ProviderError("Permintaan terlalu lama dan dihentikan.", 504);
+  }
+  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+    return new ProviderError("Kunci API Claude ditolak. Minta administrator memeriksanya.", 502);
+  }
+  if (error instanceof Anthropic.NotFoundError) {
+    return new ProviderError(`Model Claude "${config.claudeModel}" tidak tersedia. Minta administrator memperbaruinya.`, 502);
+  }
+  if (error instanceof Anthropic.RateLimitError) {
+    return new ProviderError("Batas pemakaian Claude tercapai. Coba lagi nanti atau pilih model lain.", 429);
+  }
+  if (error instanceof Anthropic.APIConnectionError) {
+    return new ProviderError("Tidak bisa menghubungi Claude. Coba lagi sebentar lagi.", 502);
+  }
+  return error;
+}

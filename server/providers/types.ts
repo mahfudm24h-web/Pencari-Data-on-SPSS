@@ -11,12 +11,26 @@ export interface ProviderResult {
   outputTokens?: number;
 }
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface ChatResult {
+  text: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export interface Provider {
   id: string;
   label: string;
   isConfigured(): boolean;
   modelFor(mode: SearchMode): string;
   search(query: string, mode: SearchMode, signal: AbortSignal): Promise<ProviderResult>;
+  /** Plain conversation without web search, used by the research assistant. */
+  chat(system: string, turns: ChatTurn[], signal: AbortSignal): Promise<ChatResult>;
 }
 
 /** An error whose message is safe to show to the user. */

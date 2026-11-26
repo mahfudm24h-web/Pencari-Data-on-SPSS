@@ -8,6 +8,11 @@ Describe the data you need; an AI model searches the web for it and returns a da
 - **Database:** PostgreSQL (accounts, sessions, saved datasets, search log)
 - **AI providers:** Google Gemini and Anthropic Claude, chosen per search. Only providers whose API key is
   set on the server appear in the app.
+- **BPS source (optional):** with a BPS WebAPI key, users can fetch official Statistics Indonesia figures
+  directly (region → subject → variable → years), with no AI involved. An AI model can suggest which
+  variables fit a plain-language request; it only chooses from the BPS catalogue.
+- **Also:** editable Variable View with value labels, a chart picker, descriptive statistics with skewness,
+  and a research assistant that answers questions about the open dataset. The interface is in Indonesian.
 
 > The data is collected by an AI model and can contain mistakes. The app shows the sources and a warning
 > with every dataset; users should check numbers against the sources before using them.
@@ -36,7 +41,7 @@ and has no daily search limit.
 |---|---|
 | `npm run dev` | Development server with hot reload |
 | `npm run lint` | Type check |
-| `npm test` | Unit tests (number parsing, dataset validation) |
+| `npm test` | Unit tests (number parsing, dataset validation, BPS response parsing) |
 | `npm run build` | Build the frontend (`dist/`) and server (`dist-server/`) |
 | `npm start` | Run the production build |
 
@@ -47,53 +52,40 @@ All settings are environment variables; see [.env.example](.env.example).
 | Variable | Purpose |
 |---|---|
 | `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` | API keys. Set one or both. |
+| `BPS_API_KEY` | Optional. Turns on the direct BPS source. |
 | `GEMINI_MODEL_FAST`, `GEMINI_MODEL_DEEP`, `CLAUDE_MODEL` | Model overrides. |
 | `ALLOW_REGISTRATION` | `false` closes sign-up (the first account can always be created). |
-| `DAILY_SEARCH_LIMIT`, `DAILY_DEEP_LIMIT` | Per-user limits per 24 hours. |
+| `DAILY_SEARCH_LIMIT`, `DAILY_DEEP_LIMIT`, `DAILY_CHAT_LIMIT` | Per-user limits per 24 hours (searches, deep searches, assistant questions). |
 | `DATABASE_URL` | PostgreSQL connection string (set automatically in Docker). |
 
 ## Deploy to a VPS with Docker and Traefik
 
-These steps fit the Hostinger "Ubuntu 24.04 with Docker and Traefik" template. The app joins the existing
-Traefik network; Traefik routes the domain to it and issues the HTTPS certificate.
+These steps fit the Hostinger "Ubuntu 24.04 with Docker and Traefik" template. That Traefik runs in host
+network mode, so the app needs no shared Docker network. Traefik finds it through its labels, routes the
+domain to it and issues the HTTPS certificate (resolver `letsencrypt`, entrypoint `websecure`).
 
-1. **DNS:** add an `A` record for your subdomain (for example `spss`) pointing to the VPS IP address.
+1. **Domain:** every Hostinger VPS answers on `*.srvNNNNNNN.hstgr.cloud`, so something like
+   `datascout.srv2174202.hstgr.cloud` works at once with no DNS change. For your own domain, add an `A`
+   record for the subdomain pointing to the VPS IP address and use it as `APP_DOMAIN`.
 
-2. **Find your Traefik settings** on the server:
-
-   ```bash
-   docker network ls
-   ```
-
-   ```bash
-   docker inspect traefik --format '{{json .Args}}'
-   ```
-
-   Note the network Traefik is attached to, the certificate resolver name
-   (`--certificatesresolvers.<name>...`) and the HTTPS entrypoint name (`--entrypoints.<name>.address=:443`).
-
-3. **Set up the app folder** (once):
+2. **Create the project.** In hPanel open *VPS > Docker Manager > Compose* and create a project from
+   `docker-compose.yml`, or on the server:
 
    ```bash
    mkdir -p /opt/datascout && cd /opt/datascout
-   ```
-
-   Copy `docker-compose.yml`, `.env.example` and the `deploy/` folder there, then:
-
-   ```bash
    cp .env.example .env && chmod 600 .env && nano .env
    ```
 
-   Fill in `POSTGRES_PASSWORD`, `APP_DOMAIN`, the three `TRAEFIK_*` values and your API keys.
+   Fill in `POSTGRES_PASSWORD`, `APP_DOMAIN` and your API keys. To build straight from GitHub without
+   cloning, set `APP_BUILD_CONTEXT=https://github.com/OWNER/REPO.git#main`.
 
-4. **Start it.** Either let GitHub Actions deploy (below), or build on the server from a clone of this
-   repository:
+3. **Start it.** Either let GitHub Actions deploy (below), or build on the server:
 
    ```bash
    docker compose up -d --build
    ```
 
-5. Open `https://<APP_DOMAIN>` and register. That first account is the administrator. Once your users have
+4. Open `https://<APP_DOMAIN>` and register. That first account is the administrator. Once your users have
    registered, set `ALLOW_REGISTRATION=false` in `.env` and run `docker compose up -d`.
 
 ### Automatic deploys

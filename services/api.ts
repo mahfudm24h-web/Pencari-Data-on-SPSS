@@ -1,4 +1,4 @@
-import { DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
+import { BpsOption, BpsRecommendation, DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -15,14 +15,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
     });
   } catch {
-    throw new ApiError('Could not reach the server. Check your connection and try again.', 0);
+    throw new ApiError('Tidak bisa menghubungi server. Periksa koneksi Anda lalu coba lagi.', 0);
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new ApiError(
       typeof payload?.error === 'string' && payload.error
         ? payload.error
-        : 'Something went wrong. Please try again.',
+        : 'Terjadi kesalahan. Silakan coba lagi.',
       response.status
     );
   }
@@ -40,13 +40,31 @@ export const api = {
     post<{ user: User }>('/api/auth/register', { name, email, password }),
   logout: () => post<{ ok: true }>('/api/auth/logout', {}),
 
-  providers: () => request<{ providers: ProviderInfo[]; quota: Quota }>('/api/providers'),
+  providers: () => request<{ providers: ProviderInfo[]; bps: boolean; quota: Quota }>('/api/providers'),
   search: (query: string, provider: string, mode: SearchMode) =>
     post<SPSSDataset>('/api/search', { query, provider, mode }),
+
+  askAssistant: (provider: string, context: string, messages: { role: 'user' | 'assistant'; text: string }[]) =>
+    post<{ text: string; model: string; providerLabel: string }>('/api/assistant', { provider, context, messages }),
+
+  bps: {
+    domains: () => request<{ items: BpsOption[] }>('/api/bps/domains'),
+    subjects: (domain: string) => request<{ items: BpsOption[] }>(`/api/bps/subjects?domain=${domain}`),
+    variables: (domain: string, subject: string) =>
+      request<{ items: BpsOption[] }>(`/api/bps/variables?domain=${domain}&subject=${subject}`),
+    periods: (domain: string, variable: string) =>
+      request<{ items: BpsOption[] }>(`/api/bps/periods?domain=${domain}&variable=${variable}`),
+    recommend: (query: string, provider: string, domain: string) =>
+      post<BpsRecommendation>('/api/bps/recommend', { query, provider, domain }),
+    dataset: (domain: string, variable: string, periods: string[]) =>
+      post<SPSSDataset>('/api/bps/dataset', { domain, variable, periods }),
+  },
 
   listDatasets: () => request<{ datasets: DatasetSummary[] }>('/api/datasets'),
   getDataset: (id: number) => request<SPSSDataset>(`/api/datasets/${id}`),
   saveDataset: (dataset: SPSSDataset) =>
     post<{ dataset: DatasetSummary }>('/api/datasets', dataset),
+  updateDataset: (id: number, dataset: SPSSDataset) =>
+    request<{ dataset: DatasetSummary }>(`/api/datasets/${id}`, { method: 'PUT', body: JSON.stringify(dataset) }),
   deleteDataset: (id: number) => request<{ ok: true }>(`/api/datasets/${id}`, { method: 'DELETE' }),
 };

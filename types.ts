@@ -10,6 +10,13 @@ export interface SPSSVariable {
   decimals: number;
   label: string;
   measure: MeasureType;
+  /** Value labels, e.g. 1 = "Laki-laki". */
+  values?: ValueLabel[];
+}
+
+export interface ValueLabel {
+  value: string;
+  label: string;
 }
 
 export interface DataSource {
@@ -29,7 +36,7 @@ export interface SPSSDataset {
   provider: string;
   providerLabel: string;
   model: string;
-  mode: SearchMode;
+  mode: SearchMode | 'bps';
   query: string;
   retrievedAt: string;
   savedAt?: string;
@@ -48,6 +55,25 @@ export interface User {
   email: string;
   name: string;
   role: 'user' | 'admin';
+}
+
+export interface BpsOption {
+  id: string;
+  name: string;
+}
+
+export interface BpsRecommendation {
+  domain: BpsOption;
+  yearFrom: number | null;
+  yearTo: number | null;
+  items: {
+    subjectId: string;
+    subjectName: string;
+    variableId: string;
+    variableName: string;
+    unit: string;
+    reason: string;
+  }[];
 }
 
 export interface ProviderInfo {
