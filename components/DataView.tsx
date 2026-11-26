@@ -6,6 +6,8 @@ interface Props {
   dataset: SPSSDataset;
 }
 
+const PAGE_SIZE = 100;
+
 interface FilterItem {
   column: string;
   value: string;
@@ -18,6 +20,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
 
   // Active filters applied to the dataset
   const [activeFilters, setActiveFilters] = useState<FilterItem[]>([]);
+  const [page, setPage] = useState(0);
 
   // Filter logic: AND condition across all active filters
   const filteredData = useMemo(() => {
@@ -33,9 +36,16 @@ const DataView: React.FC<Props> = ({ dataset }) => {
     });
   }, [dataset.data, activeFilters]);
 
+  // Large datasets (BPS can return thousands of rows) are shown one page at a time.
+  const pageCount = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageRows = filteredData.slice(pageStart, pageStart + PAGE_SIZE);
+
   const handleAddFilter = () => {
     if (pendingColumn && pendingValue) {
       setActiveFilters(prev => [...prev, { column: pendingColumn, value: pendingValue }]);
+      setPage(0);
       setPendingValue(''); // Clear value input but keep column for convenience
     }
   };
@@ -200,7 +210,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
           </thead>
           <tbody className="divide-y divide-slate-200 bg-white">
             {filteredData.length > 0 ? (
-              filteredData.map((row, rowIdx) => (
+              pageRows.map((row, i) => { const rowIdx = pageStart + i; return (
                 <tr key={rowIdx} className="hover:bg-blue-50 transition-colors">
                   <td className="px-4 py-2 text-center text-slate-400 border-r border-slate-200 bg-slate-50 text-xs">
                     {rowIdx + 1}
@@ -211,7 +221,7 @@ const DataView: React.FC<Props> = ({ dataset }) => {
                     </td>
                   ))}
                 </tr>
-              ))
+              ); })
             ) : (
               <tr>
                 <td colSpan={dataset.variables.length + 1} className="px-4 py-12 text-center text-slate-400">
@@ -231,6 +241,24 @@ const DataView: React.FC<Props> = ({ dataset }) => {
           </tbody>
         </table>
       </div>
+
+      {pageCount > 1 && (
+        <div className="px-4 py-2 border-t border-slate-200 flex items-center justify-between gap-3 text-sm text-slate-600">
+          <span>
+            Baris {(pageStart + 1).toLocaleString('id-ID')}–{Math.min(pageStart + PAGE_SIZE, filteredData.length).toLocaleString('id-ID')} dari{' '}
+            {filteredData.length.toLocaleString('id-ID')}
+          </span>
+          <span className="flex items-center gap-2">
+            <button onClick={() => setPage(currentPage - 1)} disabled={currentPage === 0} className="px-3 py-1 border border-slate-300 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40">
+              Sebelumnya
+            </button>
+            <span className="tabular-nums">{currentPage + 1} / {pageCount}</span>
+            <button onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount - 1} className="px-3 py-1 border border-slate-300 rounded-md bg-white hover:bg-slate-50 disabled:opacity-40">
+              Berikutnya
+            </button>
+          </span>
+        </div>
+      )}
     </div>
   );
 };

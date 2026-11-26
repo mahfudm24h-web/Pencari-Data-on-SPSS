@@ -22,7 +22,10 @@ export interface Dataset {
   warnings: string[];
 }
 
+/** Row limit for datasets written by an AI model. */
 export const MAX_ROWS = 1000;
+/** Row limit for datasets fetched from BPS, which can cover every region and many years. */
+export const MAX_ROWS_BPS = 20000;
 export const MAX_VARIABLES = 60;
 
 const SPSS_RESERVED = new Set([
@@ -117,7 +120,8 @@ interface RawDataset {
 
 export function normalizeDataset(
   raw: unknown,
-  extraSources: { url: string; title?: string }[] = []
+  extraSources: { url: string; title?: string }[] = [],
+  maxRows = MAX_ROWS
 ): Dataset {
   const input = (raw && typeof raw === "object" ? raw : {}) as RawDataset;
   const warnings: string[] = [];
@@ -142,9 +146,11 @@ export function normalizeDataset(
   });
 
   let rawRows = Array.isArray(input.observations) ? input.observations : [];
-  if (rawRows.length > MAX_ROWS) {
-    warnings.push(`Hanya ${MAX_ROWS} baris pertama dari ${rawRows.length} yang dipakai.`);
-    rawRows = rawRows.slice(0, MAX_ROWS);
+  if (rawRows.length > maxRows) {
+    warnings.push(
+      `Hanya ${maxRows.toLocaleString("id-ID")} baris pertama dari ${rawRows.length.toLocaleString("id-ID")} yang dipakai. Persempit pilihan untuk mendapat sisanya.`
+    );
+    rawRows = rawRows.slice(0, maxRows);
   }
 
   let misaligned = 0;

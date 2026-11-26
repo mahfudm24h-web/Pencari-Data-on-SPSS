@@ -5,7 +5,7 @@
  * the query string. List endpoints return `data: [pageInfo, items[]]`.
  */
 import { config } from "./config";
-import { Dataset, normalizeDataset } from "./dataset";
+import { Dataset, MAX_ROWS_BPS, normalizeDataset } from "./dataset";
 import { ProviderError } from "./providers/types";
 
 const BASE = "https://webapi.bps.go.id/v1/api";
@@ -32,7 +32,10 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value as T;
   const value = await load();
+  // Keep the cache bounded: drop the oldest entries first (a Map iterates in insertion order).
+  cache.delete(key);
   cache.set(key, { at: Date.now(), value });
+  while (cache.size > 500) cache.delete(cache.keys().next().value!);
   return value;
 }
 
@@ -42,7 +45,19 @@ const onlyDigits = (value: unknown, max = 8): string => {
   return text;
 };
 
+/** BPS limits how fast one key may call it. Wait and try again a few times before giving up. */
 async function request(path: string, query: Record<string, string> = {}): Promise<any> {
+  for (let attempt = 0; ; attempt++) {
+    const body = await requestOnce(path, query);
+    if (!/rate limit/i.test(String(body?.message ?? ""))) return body;
+    if (attempt >= 3) {
+      throw new ProviderError("Server BPS sedang membatasi jumlah permintaan. Tunggu sebentar lalu coba lagi.", 429);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+  }
+}
+
+async function requestOnce(path: string, query: Record<string, string> = {}): Promise<any> {
   if (!config.bpsApiKey) throw new ProviderError("Sumber BPS belum disiapkan di server.", 503);
   const url = new URL(`${BASE}/${path}/key/${encodeURIComponent(config.bpsApiKey)}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
@@ -91,8 +106,14 @@ export function listDomains(): Promise<BpsOption[]> {
   return cached("domains", async () => {
     const rows = await listAll("domain/type/all");
     // BPS calls the national domain "Pusat"; show it under a clearer name, first in the list.
+    // Codes ending in 00 are provinces; xx7x are cities (kota), the rest regencies (kabupaten).
     const domains = rows
-      .map((r) => ({ id: String(r.domain_id), name: stripHtml(r.domain_name) }))
+      .map((r) => {
+        const id = String(r.domain_id);
+        const name = stripHtml(r.domain_name);
+        if (id.endsWith("00")) return { id, name };
+        return { id, name: `${id[2] === "7" ? "Kota" : "Kab."} ${name}` };
+      })
       .filter((d) => d.id !== "0000");
     return [{ id: "0000", name: "Indonesia (nasional)" }, ...domains];
   });
@@ -225,7 +246,7 @@ export function buildBpsDataset(body: any, domainName: string): Dataset {
     sources: ["https://www.bps.go.id/"],
     variables,
     observations,
-  });
+  }, [], MAX_ROWS_BPS);
   dataset.sources = [{ url: "https://www.bps.go.id/", title: "Badan Pusat Statistik (bps.go.id)" }];
   if (matched < Object.keys(content).length) {
     dataset.warnings.push(
@@ -263,9 +284,8 @@ export async function fetchBpsDataset(domain: string, variable: string, periodId
   // Fetch a few periods at a time and merge the answers into one response.
   let body: any = null;
   for (let i = 0; i < periods.length; i += PERIODS_PER_REQUEST) {
-    const part = await request(
-      `list/model/data/domain/${d}/var/${v}/th/${periods.slice(i, i + PERIODS_PER_REQUEST).join(";")}`
-    );
+    const path = `list/model/data/domain/${d}/var/${v}/th/${periods.slice(i, i + PERIODS_PER_REQUEST).join(";")}`;
+    const part = await cached(`data:${path}`, () => request(path));
     if (isAvailable(part)) {
       body = body ? mergeDataResponses(body, part) : part;
     } else if (String(part?.status).toLowerCase() === "error" && part?.message && part?.["data-availability"] === undefined) {

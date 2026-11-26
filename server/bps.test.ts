@@ -85,3 +85,23 @@ test("fails instead of returning a table when keys cannot be matched", () => {
   assert.throws(() => buildBpsDataset({ ...docExample, datacontent: { "123": 1 } }, "Indonesia"), /belum didukung/);
   assert.throws(() => buildBpsDataset({ ...docExample, datacontent: {} }, "Indonesia"), /tidak punya data/);
 });
+
+test("matchDomain finds the region named in a request", async () => {
+  const { matchDomain } = await import("./bpsRecommend");
+  const domains = [
+    { id: "0000", name: "Indonesia (nasional)" },
+    { id: "7300", name: "Sulawesi Selatan" },
+    { id: "7400", name: "Sulawesi Tenggara" },
+    { id: "7371", name: "Kota Makassar" },
+    { id: "9107", name: "Kab. Sorong" },
+    { id: "9171", name: "Kota Sorong" },
+    { id: "7317", name: "Kab. Luwu" },
+    { id: "7322", name: "Kab. Luwu Utara" },
+  ];
+  assert.equal(matchDomain("kemiskinan di Sulawesi Selatan 2015-2023", domains)?.id, "7300");
+  assert.equal(matchDomain("jumlah penduduk makassar", domains)?.id, "7371");
+  assert.equal(matchDomain("pengangguran Luwu Utara", domains)?.id, "7322");
+  assert.equal(matchDomain("IPM kota sorong", domains)?.id, "9171");
+  assert.equal(matchDomain("IPM kabupaten sorong", domains)?.id, "9107");
+  assert.equal(matchDomain("inflasi nasional", domains), null);
+});

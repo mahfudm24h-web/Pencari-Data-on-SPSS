@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { authRouter, loadUser, requireUser } from "./auth";
 import { fetchBpsDataset, listDomains, listPeriods, listSubjects, listVariables, MAX_PERIODS } from "./bps";
+import { recommendBps } from "./bpsRecommend";
 import { config } from "./config";
 import { normalizeDataset } from "./dataset";
 import { migrate, pool } from "./db";
@@ -34,6 +35,8 @@ async function main() {
   // The app runs behind one reverse proxy (Traefik); needed for client IPs and secure cookies.
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
+  // Saved datasets can hold up to 20,000 rows; everything else stays small.
+  app.use("/api/datasets", express.json({ limit: "15mb" }));
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/api/health", (_req, res) => {
@@ -180,6 +183,41 @@ async function main() {
       query: dataset.title,
       retrievedAt: new Date().toISOString(),
     });
+  });
+  bps.post("/recommend", async (req, res) => {
+    const user = req.user!;
+    const query = typeof req.body?.query === "string" ? req.body.query.trim().slice(0, 500) : "";
+    if (query.length < 3) return res.status(400).json({ error: "Tuliskan data yang Anda cari." });
+    const provider = getProvider(String(req.body?.provider ?? "")) ?? availableProviders()[0];
+    if (!provider) return res.status(400).json({ error: "Belum ada model AI yang tersedia." });
+    if (user.role !== "admin" && (await usageToday(user.id)).chat >= config.dailyChatLimit) {
+      return res.status(429).json({
+        error: `Jatah ${config.dailyChatLimit} pertanyaan ke AI hari ini sudah habis. Coba lagi besok.`,
+      });
+    }
+    const domainId = /^\d{4}$/.test(String(req.body?.domain)) ? String(req.body.domain) : "0000";
+    const log = (status: string, model: string, inTok?: number, outTok?: number) =>
+      pool
+        .query(
+          `INSERT INTO search_logs (user_id, provider, model, mode, query, status, input_tokens, output_tokens)
+           VALUES ($1, $2, $3, 'chat', $4, $5, $6, $7)`,
+          [user.id, provider.id, model, `[BPS] ${query}`, status, inTok ?? null, outTok ?? null]
+        )
+        .catch((err) => console.error("Failed to write recommend log:", err));
+    try {
+      const result = await recommendBps(provider, query, domainId, AbortSignal.timeout(90_000));
+      await log("ok", result.model, result.inputTokens, result.outputTokens);
+      return res.json({
+        domain: result.domain,
+        yearFrom: result.yearFrom,
+        yearTo: result.yearTo,
+        items: result.items,
+        providerLabel: provider.label,
+      });
+    } catch (error) {
+      await log("error", provider.modelFor("fast"));
+      throw error;
+    }
   });
   bps.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (err instanceof ProviderError) {

@@ -265,7 +265,7 @@ const App: React.FC = () => {
           )}
 
           {bpsEnabled && source === 'bps' ? (
-            <BpsPanel loading={loading} onFetch={handleBpsFetch} onError={handleError} />
+            <BpsPanel loading={loading} providerId={providerId} onFetch={handleBpsFetch} onError={handleError} />
           ) : (
           <>
           <form onSubmit={handleSearch} className="relative group">

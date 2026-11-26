@@ -9,7 +9,8 @@ Describe the data you need; an AI model searches the web for it and returns a da
 - **AI providers:** Google Gemini and Anthropic Claude, chosen per search. Only providers whose API key is
   set on the server appear in the app.
 - **BPS source (optional):** with a BPS WebAPI key, users can fetch official Statistics Indonesia figures
-  directly (region → subject → variable → years), with no AI involved.
+  directly (region → subject → variable → years), with no AI involved. An AI model can suggest which
+  variables fit a plain-language request; it only chooses from the BPS catalogue.
 - **Also:** editable Variable View with value labels, a chart picker, descriptive statistics with skewness,
   and a research assistant that answers questions about the open dataset. The interface is in Indonesian.
 

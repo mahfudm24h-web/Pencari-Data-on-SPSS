@@ -62,6 +62,20 @@ export interface BpsOption {
   name: string;
 }
 
+export interface BpsRecommendation {
+  domain: BpsOption;
+  yearFrom: number | null;
+  yearTo: number | null;
+  items: {
+    subjectId: string;
+    subjectName: string;
+    variableId: string;
+    variableName: string;
+    unit: string;
+    reason: string;
+  }[];
+}
+
 export interface ProviderInfo {
   id: string;
   label: string;

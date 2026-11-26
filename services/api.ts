@@ -1,4 +1,4 @@
-import { BpsOption, DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
+import { BpsOption, BpsRecommendation, DatasetSummary, ProviderInfo, Quota, SearchMode, SPSSDataset, User } from '../types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -54,6 +54,8 @@ export const api = {
       request<{ items: BpsOption[] }>(`/api/bps/variables?domain=${domain}&subject=${subject}`),
     periods: (domain: string, variable: string) =>
       request<{ items: BpsOption[] }>(`/api/bps/periods?domain=${domain}&variable=${variable}`),
+    recommend: (query: string, provider: string, domain: string) =>
+      post<BpsRecommendation>('/api/bps/recommend', { query, provider, domain }),
     dataset: (domain: string, variable: string, periods: string[]) =>
       post<SPSSDataset>('/api/bps/dataset', { domain, variable, periods }),
   },
